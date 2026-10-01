@@ -18,8 +18,8 @@ def train_tokenizer(train_pairs, vocab_size = 8000, model_prefix = "spm"):
             f.write(f"{de.strip()}\n{en.strip()}\n")
         corpus_path = f.name
 
-    spm = spm.SentencePieceTrainer.train(
-        corpus_path=corpus_path,
+    spm.SentencePieceTrainer.train(
+        input=corpus_path,
         model_prefix=model_prefix,
         vocab_size=vocab_size,
         model_type = "bpe",
@@ -44,3 +44,43 @@ def encode_pair(sp, src, tgt, max_len: int=100):
         return None
     return src, tgt
 
+class TranslationDataset(torch.utils.data.Dataset):
+    def __init__(self, pairs, sp, max_len: int=100):
+        self.examples = []
+        for src, tgt in pairs:
+            encoded = encode_pair(sp, src, tgt, max_len)
+            if encoded is not None:
+                self.examples.append(encoded)
+
+    def __len__(self):
+        return len(self.examples)
+    def __getitem__(self, idx):
+        return self.examples[idx]
+
+
+def collate_fn(batch):
+    src_seqs, tgt_seqs = zip(*batch)
+
+    max_src_len = max([len(seq) for seq in src_seqs])
+    max_tgt_len = max([len(seq) for seq in tgt_seqs])
+
+    src = torch.full((len(batch), max_src_len), PAD_ID, dtype=torch.long)
+    tgt = torch.full((len(batch), max_tgt_len), PAD_ID, dtype=torch.long)
+
+    for i, (src_seq, tgt_seq) in enumerate(zip(src_seqs, tgt_seqs)):
+        src[i, :len(src_seq)] = torch.tensor(src_seq, dtype=torch.long)
+        tgt[i, :len(tgt_seq)] = torch.tensor(tgt_seq, dtype=torch.long)
+
+    return {
+        "src": src,
+        "tgt_input": tgt[:, :-1],
+        "tgt_output": tgt[:, 1:],
+    }
+
+def get_dataloader(dataset, batch_size: int=32, shuffle: bool = True):
+    return torch.utils.data.DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        collate_fn=collate_fn,
+        shuffle=shuffle,
+    )
