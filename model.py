@@ -171,6 +171,7 @@ class Transformer(nn.Module):
 
     def forward(self, src, tgt):
         src_mask = self.make_src_mask(src)
+        tgt_mask = self.make_tgt_mask(tgt)
         enc_out = self.encoder(src, src_mask)
-        dec_out = self.decode(tgt, enc_out, src_mask)
+        dec_out = self.decoder(tgt, enc_out, tgt_mask,src_mask)
         return self.out_proj(dec_out)
